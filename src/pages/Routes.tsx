@@ -2,7 +2,7 @@
 import Layout from "@/components/dashboard/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-const Routes = () => {
+const RoutesPlanningPage = () => {
   return (
     <Layout>
       <Card className="h-[calc(100vh-9rem)]">
@@ -22,4 +22,4 @@ const Routes = () => {
   );
 };
 
-export default Routes;
+export default RoutesPlanningPage;
