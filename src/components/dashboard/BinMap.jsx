@@ -34,18 +34,22 @@ const convertBinsToMarkers = (bins) => {
   }));
 };
 
+// Create a stable googleMapsApiKey value outside the component
+// This prevents the API loader from being called with different options
+const googleMapsApiKey = localStorage.getItem('googleMapsApiKey') || '';
+
 const BinMap = () => {
-  const [apiKey, setApiKey] = useState(localStorage.getItem('googleMapsApiKey'));
-  const [showApiKeyInput, setShowApiKeyInput] = useState(!apiKey);
+  const [apiKey, setApiKey] = useState(googleMapsApiKey);
+  const [showApiKeyInput, setShowApiKeyInput] = useState(!googleMapsApiKey);
   const [markers, setMarkers] = useState([]);
   const [selectedMarker, setSelectedMarker] = useState(null);
   const [map, setMap] = useState(null);
   const [directionsRenderer, setDirectionsRenderer] = useState(null);
   const [showRoute, setShowRoute] = useState(false);
 
-  // Initialize the Google Maps API loader
+  // Initialize the Google Maps API loader with stable key reference
   const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: apiKey || '',
+    googleMapsApiKey,
     id: 'google-map-script'
   });
 
