@@ -6,6 +6,7 @@ import BinStatus from "@/components/dashboard/BinStatus";
 import CollectionStats from "@/components/dashboard/CollectionStats";
 import RouteOptimization from "@/components/dashboard/RouteOptimization";
 import AlertsCard from "@/components/dashboard/AlertsCard";
+import WasteSegregation from "@/components/dashboard/WasteSegregation";
 
 const Index = () => {
   return (
@@ -25,6 +26,10 @@ const Index = () => {
         <div className="grid grid-cols-2 gap-4">
           <RouteOptimization />
           <AlertsCard />
+        </div>
+        
+        <div className="grid grid-cols-1">
+          <WasteSegregation />
         </div>
       </div>
     </Layout>

@@ -34,8 +34,7 @@ const BinStatus = () => {
               <div className="flex items-center gap-2">
                 <Progress 
                   value={bin.fillLevel} 
-                  className={cn("h-2")}
-                  indicatorClassName={getProgressColor(bin.fillLevel)}
+                  className={cn("h-2", getProgressColor(bin.fillLevel))}
                 />
                 <span className="text-sm text-muted-foreground w-9">{bin.fillLevel}%</span>
               </div>
