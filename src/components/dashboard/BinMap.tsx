@@ -1,41 +1,219 @@
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { mockBins } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
+import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from "@react-google-maps/api";
+
+// Default map center - can be adjusted as needed
+const DEFAULT_CENTER = { lat: 40.7128, lng: -74.006 };
+
+// Map container style
+const mapContainerStyle = {
+  width: '100%',
+  height: '100%'
+};
+
+// Map options
+const mapOptions = {
+  disableDefaultUI: false,
+  zoomControl: true,
+  mapTypeControl: false,
+  streetViewControl: false,
+  fullscreenControl: true,
+};
+
+// Convert our mock bins to Google Maps compatible format
+const convertBinsToMarkers = (bins) => {
+  return bins.map(bin => ({
+    ...bin,
+    position: {
+      lat: (bin.location.y / 100) * 0.1 + DEFAULT_CENTER.lat - 0.05,
+      lng: (bin.location.x / 100) * 0.1 + DEFAULT_CENTER.lng - 0.05,
+    }
+  }));
+};
 
 const BinMap = () => {
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  const [selectedBin, setSelectedBin] = useState<any>(null);
+  const [apiKey, setApiKey] = useState<string | null>(localStorage.getItem('googleMapsApiKey'));
+  const [showApiKeyInput, setShowApiKeyInput] = useState<boolean>(!apiKey);
+  const [markers, setMarkers] = useState<any[]>([]);
+  const [selectedMarker, setSelectedMarker] = useState<any>(null);
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [directionsRenderer, setDirectionsRenderer] = useState<google.maps.DirectionsRenderer | null>(null);
   const [showRoute, setShowRoute] = useState(false);
 
-  useEffect(() => {
-    // This would normally be loaded from your Google Maps API
-    // For the prototype we'll show a placeholder map image
-    const loadMap = () => {
-      if (mapContainerRef.current) {
-        // Map init would happen here with actual Google Maps API
-        console.log("Map loaded");
-      }
-    };
+  // Initialize the Google Maps API loader
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey: apiKey || '',
+    id: 'google-map-script'
+  });
 
-    loadMap();
-    return () => {
-      // Cleanup would happen here
+  // Set up markers based on mock data
+  useEffect(() => {
+    if (isLoaded) {
+      const binMarkers = convertBinsToMarkers(mockBins);
+      setMarkers(binMarkers);
+    }
+  }, [isLoaded]);
+
+  // Set up directions renderer when map is loaded
+  useEffect(() => {
+    if (isLoaded && map) {
+      const renderer = new google.maps.DirectionsRenderer({
+        map,
+        suppressMarkers: false,
+      });
+      setDirectionsRenderer(renderer);
+    }
+  }, [isLoaded, map]);
+
+  // Handle bin selection
+  const handleMarkerClick = (marker: any) => {
+    setSelectedMarker(marker);
+    setShowRoute(false);
+    
+    if (directionsRenderer) {
+      directionsRenderer.setMap(null);
+      directionsRenderer.setMap(map);
+    }
+  };
+
+  // Start navigation to the selected bin
+  const startNavigation = () => {
+    if (!isLoaded || !map || !selectedMarker || !directionsRenderer) return;
+    
+    const directionsService = new google.maps.DirectionsService();
+    
+    // Simulating current location as slightly south of the map center
+    const currentLocation = { 
+      lat: DEFAULT_CENTER.lat - 0.01, 
+      lng: DEFAULT_CENTER.lng 
     };
+    
+    directionsService.route(
+      {
+        origin: currentLocation,
+        destination: selectedMarker.position,
+        travelMode: google.maps.TravelMode.DRIVING,
+      },
+      (result, status) => {
+        if (status === google.maps.DirectionsStatus.OK && result) {
+          directionsRenderer.setDirections(result);
+          setShowRoute(true);
+        } else {
+          console.error(`Navigation error: ${status}`);
+        }
+      }
+    );
+  };
+
+  // Handle map load
+  const onMapLoad = useCallback((map: google.maps.Map) => {
+    setMap(map);
   }, []);
 
-  const handleBinClick = (bin: any) => {
-    setSelectedBin(bin);
-    setShowRoute(false);
+  // Handle API key submission
+  const handleApiKeySubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const input = e.currentTarget.elements.namedItem('apiKey') as HTMLInputElement;
+    const newApiKey = input.value.trim();
+    if (newApiKey) {
+      localStorage.setItem('googleMapsApiKey', newApiKey);
+      setApiKey(newApiKey);
+      setShowApiKeyInput(false);
+      window.location.reload(); // Reload to apply new API key
+    }
   };
 
-  const startNavigation = () => {
-    setShowRoute(true);
-    // In a real app, this would trigger the navigation system
-    console.log(`Starting navigation to bin ${selectedBin.id}`);
-  };
+  // Render API key input if needed
+  if (showApiKeyInput) {
+    return (
+      <Card className="col-span-3 row-span-4 overflow-hidden">
+        <CardHeader className="p-4">
+          <CardTitle>Google Maps Setup</CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          <div className="space-y-4">
+            <p>To use Google Maps, you need to enter your Google Maps API key.</p>
+            <form onSubmit={handleApiKeySubmit} className="space-y-4">
+              <div>
+                <label htmlFor="apiKey" className="block text-sm font-medium mb-1">
+                  Google Maps API Key
+                </label>
+                <input
+                  id="apiKey"
+                  name="apiKey"
+                  type="text"
+                  className="w-full p-2 border rounded-md"
+                  placeholder="Enter your Google Maps API key"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                className="bg-primary text-white py-2 px-4 rounded-md hover:bg-primary/90"
+              >
+                Save API Key
+              </button>
+            </form>
+            <div className="text-sm text-muted-foreground mt-4">
+              <p>To get a Google Maps API key:</p>
+              <ol className="list-decimal pl-5 mt-2 space-y-1">
+                <li>Go to the <a href="https://console.cloud.google.com/google/maps-apis/overview" target="_blank" rel="noopener noreferrer" className="text-primary underline">Google Cloud Platform Console</a></li>
+                <li>Create a project if you don't have one</li>
+                <li>Enable the "Maps JavaScript API"</li>
+                <li>Create credentials to get your API key</li>
+              </ol>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
+  // Handle loading error
+  if (loadError) {
+    return (
+      <Card className="col-span-3 row-span-4 overflow-hidden">
+        <CardHeader className="p-4">
+          <CardTitle>Map Error</CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          <div className="text-center">
+            <p className="text-destructive">Error loading Google Maps: {loadError.message}</p>
+            <button 
+              className="mt-4 bg-primary text-white py-2 px-4 rounded-md"
+              onClick={() => {
+                localStorage.removeItem('googleMapsApiKey');
+                setShowApiKeyInput(true);
+              }}
+            >
+              Change API Key
+            </button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Show loading state
+  if (!isLoaded) {
+    return (
+      <Card className="col-span-3 row-span-4 overflow-hidden">
+        <CardHeader className="p-4">
+          <CardTitle>Smart Bin Map</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0 relative" style={{ height: "calc(100% - 57px)" }}>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <p>Loading Google Maps...</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Main map component
   return (
     <Card className="col-span-3 row-span-4 overflow-hidden">
       <CardHeader className="p-4 flex flex-row justify-between items-center">
@@ -60,138 +238,118 @@ const BinMap = () => {
         </div>
       </CardHeader>
       <CardContent className="p-0 relative" style={{ height: "calc(100% - 57px)" }}>
-        {/* Map Container */}
-        <div 
-          ref={mapContainerRef} 
-          className="absolute inset-0 bg-gray-200"
+        <GoogleMap
+          mapContainerStyle={mapContainerStyle}
+          center={DEFAULT_CENTER}
+          zoom={14}
+          options={mapOptions}
+          onLoad={onMapLoad}
         >
-          {/* Mock map with sample bins */}
-          <div className="relative w-full h-full overflow-hidden bg-[#EBF3FB] p-4">
-            {/* This would be replaced with actual Google Maps */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-full h-full relative">
-                {/* Mock city grid */}
-                <div className="absolute inset-0 grid grid-cols-8 grid-rows-8">
-                  {Array.from({ length: 8 }).map((_, rowIndex) => (
-                    Array.from({ length: 8 }).map((_, colIndex) => (
+          {/* Render all bin markers */}
+          {markers.map((marker) => (
+            <Marker
+              key={marker.id}
+              position={marker.position}
+              onClick={() => handleMarkerClick(marker)}
+              icon={{
+                path: google.maps.SymbolPath.CIRCLE,
+                fillColor: 
+                  marker.fillLevel >= 90 ? '#EF4444' : 
+                  marker.fillLevel >= 70 ? '#F59E0B' : 
+                  '#10B981',
+                fillOpacity: 1,
+                scale: marker.hasAlert ? 8 : 6,
+                strokeColor: 'white',
+                strokeWeight: 2,
+              }}
+              animation={marker.hasAlert ? google.maps.Animation.BOUNCE : undefined}
+            />
+          ))}
+
+          {/* Display info window for selected bin */}
+          {selectedMarker && (
+            <InfoWindow
+              position={selectedMarker.position}
+              onCloseClick={() => setSelectedMarker(null)}
+            >
+              <div className="p-1 max-w-xs">
+                <h3 className="text-base font-medium">Bin #{selectedMarker.id}</h3>
+                <p className="text-sm text-gray-500">{selectedMarker.location.address}</p>
+                <div className="mt-2 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs">Fill Level:</span>
+                    <div className="w-16 bg-gray-200 rounded-full h-1.5">
                       <div 
-                        key={`${rowIndex}-${colIndex}`}
-                        className="border border-blue-200/30"
-                      />
-                    ))
-                  ))}
-                </div>
-                
-                {/* Mock roads */}
-                <div className="absolute left-[12.5%] top-0 bottom-0 w-[2%] bg-gray-300"></div>
-                <div className="absolute left-[37.5%] top-0 bottom-0 w-[2%] bg-gray-300"></div>
-                <div className="absolute left-[62.5%] top-0 bottom-0 w-[2%] bg-gray-300"></div>
-                <div className="absolute left-[87.5%] top-0 bottom-0 w-[2%] bg-gray-300"></div>
-                <div className="absolute top-[12.5%] left-0 right-0 h-[2%] bg-gray-300"></div>
-                <div className="absolute top-[37.5%] left-0 right-0 h-[2%] bg-gray-300"></div>
-                <div className="absolute top-[62.5%] left-0 right-0 h-[2%] bg-gray-300"></div>
-                <div className="absolute top-[87.5%] left-0 right-0 h-[2%] bg-gray-300"></div>
-
-                {/* Bins */}
-                {mockBins.map((bin) => (
-                  <div
-                    key={bin.id}
-                    className={cn(
-                      "absolute w-4 h-4 rounded-full cursor-pointer transition-transform transform hover:scale-150",
-                      bin.fillLevel >= 90 ? "bg-binHigh" : 
-                      bin.fillLevel >= 70 ? "bg-binMedium" : 
-                      "bg-binLow",
-                      bin.hasAlert && "animate-pulse-alert",
-                      selectedBin?.id === bin.id && "ring-2 ring-white"
-                    )}
-                    style={{ 
-                      left: `${bin.location.x}%`, 
-                      top: `${bin.location.y}%`,
-                      transform: `translate(-50%, -50%) ${selectedBin?.id === bin.id ? 'scale(1.5)' : ''}`
+                        className={cn(
+                          "h-1.5 rounded-full",
+                          selectedMarker.fillLevel >= 90 ? "bg-binHigh" : 
+                          selectedMarker.fillLevel >= 70 ? "bg-binMedium" : 
+                          "bg-binLow"
+                        )}
+                        style={{ width: `${selectedMarker.fillLevel}%` }}
+                      ></div>
+                    </div>
+                    <span className="text-xs">{selectedMarker.fillLevel}%</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs">Battery:</span>
+                    <div className="w-16 bg-gray-200 rounded-full h-1.5">
+                      <div 
+                        className={cn(
+                          "h-1.5 rounded-full",
+                          selectedMarker.battery < 20 ? "bg-binHigh" : 
+                          selectedMarker.battery < 50 ? "bg-binMedium" : 
+                          "bg-binLow"
+                        )}
+                        style={{ width: `${selectedMarker.battery}%` }}
+                      ></div>
+                    </div>
+                    <span className="text-xs">{selectedMarker.battery}%</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span>Last Emptied:</span>
+                    <span>{selectedMarker.lastEmptied}</span>
+                  </div>
+                  {selectedMarker.hasAlert && (
+                    <div className="text-xs text-binAlert font-medium">
+                      Alert: {selectedMarker.alertMessage}
+                    </div>
+                  )}
+                  <button 
+                    className="w-full mt-1 bg-primary text-white py-1 px-2 rounded-md text-xs hover:bg-primary/90 transition-colors"
+                    onClick={() => {
+                      setSelectedMarker(null);
+                      startNavigation();
                     }}
-                    onClick={() => handleBinClick(bin)}
-                  />
-                ))}
+                  >
+                    Navigate to Bin
+                  </button>
+                </div>
+              </div>
+            </InfoWindow>
+          )}
 
-                {/* Navigation route */}
-                {showRoute && selectedBin && (
-                  <svg className="absolute inset-0 w-full h-full" style={{ zIndex: 10 }}>
-                    <path 
-                      d={`M 50,95 Q 50,${selectedBin.location.y + 20} ${selectedBin.location.x},${selectedBin.location.y}`} 
-                      stroke="rgba(37, 99, 235, 0.8)" 
-                      strokeWidth="3" 
-                      strokeDasharray="5,5"
-                      fill="none"
-                    />
-                  </svg>
-                )}
+          {/* Current location marker */}
+          <Marker
+            position={{ lat: DEFAULT_CENTER.lat - 0.01, lng: DEFAULT_CENTER.lng }}
+            icon={{
+              path: google.maps.SymbolPath.CIRCLE,
+              fillColor: '#3B82F6',
+              fillOpacity: 1,
+              scale: 8,
+              strokeColor: 'white',
+              strokeWeight: 2,
+            }}
+          />
+        </GoogleMap>
 
-                {/* Current location */}
-                <div 
-                  className="absolute w-5 h-5 bg-blue-500 rounded-full border-2 border-white" 
-                  style={{ left: '50%', top: '95%', transform: 'translate(-50%, -50%)' }}
-                >
-                  <div className="absolute inset-0 bg-blue-500 rounded-full animate-ping opacity-75"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Selected Bin Info */}
-        {selectedBin && (
-          <div className="absolute bottom-4 right-4 p-4 bg-white rounded-lg shadow-lg w-64">
-            <h3 className="text-lg font-medium">Bin #{selectedBin.id}</h3>
-            <p className="text-sm text-gray-500">{selectedBin.location.address}</p>
-            <div className="mt-2 space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-sm">Fill Level:</span>
-                <div className="w-24 bg-gray-200 rounded-full h-2">
-                  <div 
-                    className={cn(
-                      "h-2 rounded-full",
-                      selectedBin.fillLevel >= 90 ? "bg-binHigh" : 
-                      selectedBin.fillLevel >= 70 ? "bg-binMedium" : 
-                      "bg-binLow"
-                    )}
-                    style={{ width: `${selectedBin.fillLevel}%` }}
-                  ></div>
-                </div>
-                <span className="text-sm font-medium">{selectedBin.fillLevel}%</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm">Battery:</span>
-                <div className="w-24 bg-gray-200 rounded-full h-2">
-                  <div 
-                    className={cn(
-                      "h-2 rounded-full",
-                      selectedBin.battery < 20 ? "bg-binHigh" : 
-                      selectedBin.battery < 50 ? "bg-binMedium" : 
-                      "bg-binLow"
-                    )}
-                    style={{ width: `${selectedBin.battery}%` }}
-                  ></div>
-                </div>
-                <span className="text-sm font-medium">{selectedBin.battery}%</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm">Last Emptied:</span>
-                <span className="text-sm font-medium">{selectedBin.lastEmptied}</span>
-              </div>
-              {selectedBin.hasAlert && (
-                <div className="text-sm text-binAlert font-medium">
-                  Alert: {selectedBin.alertMessage}
-                </div>
-              )}
-              <button 
-                className="w-full mt-2 bg-primary text-white py-1 px-3 rounded-md text-sm hover:bg-primary/90 transition-colors"
-                onClick={startNavigation}
-              >
-                Navigate to Bin
-              </button>
-            </div>
-          </div>
-        )}
+        {/* API Key management button */}
+        <button
+          onClick={() => setShowApiKeyInput(true)}
+          className="absolute bottom-3 right-3 bg-white rounded-md p-2 shadow-md text-xs z-10"
+        >
+          Change API Key
+        </button>
       </CardContent>
     </Card>
   );
