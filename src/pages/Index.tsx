@@ -1,13 +1,33 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+
+import Layout from "@/components/dashboard/Layout";
+import BinMap from "@/components/dashboard/BinMap";
+import StatsRow from "@/components/dashboard/StatsRow";
+import BinStatus from "@/components/dashboard/BinStatus";
+import CollectionStats from "@/components/dashboard/CollectionStats";
+import RouteOptimization from "@/components/dashboard/RouteOptimization";
+import AlertsCard from "@/components/dashboard/AlertsCard";
 
 const Index = () => {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
-        <p className="text-xl text-gray-600">Start building your amazing project here!</p>
+    <Layout>
+      <div className="space-y-4">
+        <StatsRow />
+        
+        <div className="grid grid-cols-4 gap-4">
+          <BinMap />
+          
+          <div className="col-span-1 space-y-4">
+            <BinStatus />
+            <CollectionStats />
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-4">
+          <RouteOptimization />
+          <AlertsCard />
+        </div>
       </div>
-    </div>
+    </Layout>
   );
 };
 
